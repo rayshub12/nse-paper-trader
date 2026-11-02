@@ -16,7 +16,7 @@ class PaperBook:
         day=date.today().isoformat()
         async with aiosqlite.connect(self.db) as db:
             cash,realized=await self._account(db,day); await db.commit()
-            cur=await db.execute("SELECT id,symbol,qty,price,stop,created_at FROM trades WHERE day=? AND side='BUY' AND id NOT IN (SELECT id FROM trades WHERE day=? AND side='CLOSED')",(day,day))
+            cur=await db.execute("SELECT b.id,b.symbol,b.qty,b.price,b.stop,b.created_at FROM trades b WHERE b.day=? AND b.side='BUY' AND NOT EXISTS (SELECT 1 FROM trades c WHERE c.day=b.day AND c.symbol=b.symbol AND c.side='CLOSED' AND c.id>b.id)",(day,))
             rows=await cur.fetchall()
             cur=await db.execute('SELECT id,symbol,side,qty,price,stop,created_at,pnl FROM trades WHERE day=? ORDER BY id DESC LIMIT 100',(day,)); trades=await cur.fetchall()
         positions=[{'id':r[0],'symbol':r[1],'qty':r[2],'entry':r[3],'stop_loss':r[4],'created_at':r[5]} for r in rows]
