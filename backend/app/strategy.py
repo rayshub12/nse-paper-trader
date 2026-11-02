@@ -1,5 +1,14 @@
-from datetime import datetime, timezone
 import pandas as pd
+from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
+
+INDIA_TZ = ZoneInfo('Asia/Kolkata')
+
+def _candle_time(value):
+    if isinstance(value,(int,float)): return datetime.fromtimestamp(value, tz=timezone.utc)
+    parsed=datetime.fromisoformat(str(value).replace('Z','+00:00'))
+    return parsed.replace(tzinfo=INDIA_TZ) if parsed.tzinfo is None else parsed
+
 
 
 def _indicators(rows):
@@ -21,6 +30,14 @@ def _indicators(rows):
 
 def analyze(symbol, five, fifteen):
     base={'symbol':symbol,'signal':'WAIT','score':0,'entry':None,'stop_loss':None,'target_1':None,'target_2':None,'reasons':[],'status':'insufficient_data'}
+    try:
+        now=datetime.now(timezone.utc)
+        age5=now-_candle_time(five[-1]['time']).astimezone(timezone.utc)
+        age15=now-_candle_time(fifteen[-1]['time']).astimezone(timezone.utc)
+        if age5>timedelta(minutes=15) or age15>timedelta(minutes=40) or age5<timedelta(seconds=-60) or age15<timedelta(seconds=-60):
+            base['status']='stale_data'; base['reasons']=['Latest 5m/15m candles are stale or future-dated. No signal generated.']; return base
+    except Exception:
+        base['status']='invalid_timestamp'; base['reasons']=['Provider candle timestamps could not be validated.']; return base
     a=_indicators(five); b=_indicators(fifteen)
     if a is None or b is None: base['reasons']=['Need at least 25 valid completed candles on both 5m and 15m timeframes.']; return base
     x=a.iloc[-1]; y=b.iloc[-1]
