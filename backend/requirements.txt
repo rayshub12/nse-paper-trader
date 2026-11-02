@@ -1,0 +1,7 @@
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+pydantic-settings==2.9.1
+aiosqlite==0.21.0
+pandas==2.2.3
+numpy==2.2.5
+mcp==1.9.2
