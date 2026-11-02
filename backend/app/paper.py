@@ -28,7 +28,7 @@ class PaperBook:
     async def buy(self,symbol,qty,price,stop):
         if qty<1 or price<=0 or stop<=0 or stop>=price: raise ValueError('Quantity and prices invalid; stop must be below entry.')
         if (price-stop)*qty>settings.max_risk_per_trade: raise ValueError('Trade exceeds max risk per trade.')
-        day=date.today().isoformat()
+        day=trading_day()
         async with aiosqlite.connect(self.db) as db:
             cash,realized=await self._account(db,day)
             cur=await db.execute("SELECT COUNT(*) FROM trades b WHERE b.day=? AND b.side='BUY' AND NOT EXISTS (SELECT 1 FROM trades c WHERE c.day=b.day AND c.symbol=b.symbol AND c.side='CLOSED' AND c.id>b.id)",(day,)); count=(await cur.fetchone())[0]
@@ -42,7 +42,7 @@ class PaperBook:
             await db.execute('UPDATE account SET cash=? WHERE day=?',(cash-cost,day)); await db.commit()
         return await self.snapshot()
     async def sell(self,symbol,price):
-        day=date.today().isoformat(); symbol=symbol.upper()
+        day=trading_day(); symbol=symbol.upper()
         async with aiosqlite.connect(self.db) as db:
             cash,realized=await self._account(db,day)
             cur=await db.execute("SELECT b.id,b.qty,b.price FROM trades b WHERE b.day=? AND b.symbol=? AND b.side='BUY' AND NOT EXISTS (SELECT 1 FROM trades c WHERE c.day=b.day AND c.symbol=b.symbol AND c.side='CLOSED' AND c.id>b.id) ORDER BY b.id DESC LIMIT 1",(day,symbol)); row=await cur.fetchone()
