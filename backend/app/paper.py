@@ -1,5 +1,9 @@
 import aiosqlite
-from datetime import datetime, date
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+INDIA_TZ = ZoneInfo('Asia/Kolkata')
+def trading_day(): return datetime.now(INDIA_TZ).date().isoformat()
 from .config import settings
 
 class PaperBook:
@@ -13,7 +17,7 @@ class PaperBook:
             await db.execute('INSERT INTO account(day,cash,realized) VALUES(?,?,0)',(day,settings.starting_cash)); return [settings.starting_cash,0.0]
         return [float(row[0]),float(row[1])]
     async def snapshot(self):
-        day=date.today().isoformat()
+        day=trading_day()
         async with aiosqlite.connect(self.db) as db:
             cash,realized=await self._account(db,day); await db.commit()
             cur=await db.execute("SELECT b.id,b.symbol,b.qty,b.price,b.stop,b.created_at FROM trades b WHERE b.day=? AND b.side='BUY' AND NOT EXISTS (SELECT 1 FROM trades c WHERE c.day=b.day AND c.symbol=b.symbol AND c.side='CLOSED' AND c.id>b.id)",(day,))
@@ -29,6 +33,8 @@ class PaperBook:
             cash,realized=await self._account(db,day)
             cur=await db.execute("SELECT COUNT(*) FROM trades b WHERE b.day=? AND b.side='BUY' AND NOT EXISTS (SELECT 1 FROM trades c WHERE c.day=b.day AND c.symbol=b.symbol AND c.side='CLOSED' AND c.id>b.id)",(day,)); count=(await cur.fetchone())[0]
             if count>=settings.max_open_positions: raise ValueError('Maximum open positions reached.')
+            cur=await db.execute("SELECT 1 FROM trades b WHERE b.day=? AND b.symbol=? AND b.side='BUY' AND NOT EXISTS (SELECT 1 FROM trades c WHERE c.day=b.day AND c.symbol=b.symbol AND c.side='CLOSED' AND c.id>b.id) LIMIT 1",(day,symbol.upper()))
+            if await cur.fetchone(): raise ValueError('A paper position for this symbol is already open.')
             if realized<=-settings.daily_loss_limit: raise ValueError('Daily realized loss limit reached.')
             cost=qty*price
             if cost>cash: raise ValueError('Insufficient virtual cash.')
