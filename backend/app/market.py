@@ -4,8 +4,16 @@ Provider response normalization is intentionally explicit: map documented provid
 fields here rather than guessing. No synthetic candles or prices are generated.
 """
 import json, os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from typing import Any
+
+INDIA_TZ = ZoneInfo('Asia/Kolkata')
+
+def _parse_timestamp(value):
+    if isinstance(value,(int,float)): return datetime.fromtimestamp(value,tz=timezone.utc)
+    parsed=datetime.fromisoformat(str(value).replace('Z','+00:00'))
+    return parsed.replace(tzinfo=INDIA_TZ) if parsed.tzinfo is None else parsed
 
 
 def _json_env(name: str, default: Any):
@@ -64,6 +72,12 @@ async def get_quote(symbol: str):
     # Expected normalized contract: {symbol, price, timestamp}.
     if not isinstance(raw,dict) or not isinstance(raw.get('price'),(int,float)) or not raw.get('timestamp'):
         raise RuntimeError('Map provider quote fields to {symbol, price, timestamp} in market.py')
+    try:
+        stamp=_parse_timestamp(raw['timestamp'])
+        age=datetime.now(timezone.utc)-stamp.astimezone(timezone.utc)
+        if age>timedelta(minutes=3) or age<timedelta(seconds=-60): raise RuntimeError('Provider quote is stale or future-dated; paper trade blocked')
+    except (ValueError, TypeError, OverflowError) as exc:
+        raise RuntimeError('Provider quote timestamp is invalid; paper trade blocked') from exc
     return {'symbol':symbol,'price':float(raw['price']),'timestamp':str(raw['timestamp']),'source':'MCP'}
 
 
